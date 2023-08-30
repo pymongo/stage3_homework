@@ -151,13 +151,17 @@ impl net::DeviceOperations for NetDevice {
 
     /// this method will be called when you type `ip link set eth0 up` in your shell.
     fn open(dev: &net::Device, data: &NetDevicePrvData) -> Result {
+        dbg!("--> open");
         pr_info!("Rust for linux e1000 driver demo (net device open)\n");
 
         dev.netif_carrier_off();
+        dbg!(line!());
 
         // init dma memory for tx and rx
         let tx_ringbuf = Self::e1000_setup_all_tx_resources(data)?;
+        dbg!(line!());
         let rx_ringbuf = Self::e1000_setup_all_rx_resources(dev, data)?;
+        dbg!(line!());
 
         // TODO e1000_power_up_phy() not implemented. It's used in case of PHY *MAY* power down,
         // which will not be supported in this MVP driver.
@@ -165,32 +169,47 @@ impl net::DeviceOperations for NetDevice {
 
         // modify e1000's hardware registers, give rx/tx queue info to the nic.
         data.e1000_hw_ops.e1000_configure(&rx_ringbuf, &tx_ringbuf)?;
+        dbg!(line!());
 
         *data.rx_ring.lock_irqdisable() = Some(rx_ringbuf);
+        dbg!(line!());
         *data.tx_ring.lock_irqdisable() = Some(tx_ringbuf);
+        dbg!(line!());
 
         let irq_prv_data = Box::try_new(IrqPrivateData{
             e1000_hw_ops: Arc::clone(&data.e1000_hw_ops),
             napi: Arc::clone(&data.napi),
         })?;
+        dbg!(line!());
         
         // Again, the `irq::Registration` contains an `irq::InternalRegistration` which implemented `Drop`, so 
         // we mustn't let it dropped.
         // TODO: there is memory leak now. 
         let req_reg = kernel::irq::Registration::<E1000InterruptHandler>::try_new(data.irq, irq_prv_data, kernel::irq::flags::SHARED, fmt!("{}",data.dev.name()))?;
+        dbg!(line!());
         data._irq_handler.store(Box::into_raw(Box::try_new(req_reg)?), core::sync::atomic::Ordering::Relaxed);
+        dbg!(line!());
 
         data.napi.enable();
-
+        dbg!(line!());
         dev.netif_start_queue();
-
+        dbg!(line!());
         dev.netif_carrier_on();
-
+        dbg!(line!());
         Ok(())
     }
 
-    fn stop(_dev: &net::Device, _data: &NetDevicePrvData) -> Result {
+    fn stop(dev: &net::Device, data: &NetDevicePrvData) -> Result {
+        dbg!("--> stop");
         pr_info!("Rust for linux e1000 driver demo (net device stop)\n");
+        *data.tx_ring.lock() = None;
+        *data.rx_ring.lock() = None;
+        unsafe {
+            // let x: core::cell::UnsafeCell<bindings::napi_struct> = core::mem::transmute(data.napi);
+            bindings::napi_disable(data.napi.0.get());
+        }
+        dev.netif_stop_queue();
+        dev.netif_carrier_off();
         Ok(())
     }
 
