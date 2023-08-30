@@ -1,12 +1,13 @@
 #!/bin/sh
-busybox_folder="../busybox-1.36.1"
+set -exu
+busybox_folder="../busybox"
 kernel_image="../linux/arch/x86/boot/bzImage"
 work_dir=$PWD
 rootfs="rootfs"
 rootfs_img=$PWD"/rootfs_img"
 
 make LLVM=1
-echo $base_path
+# echo $base_path
 if [ ! -d $rootfs ]; then
     mkdir $rootfs
 fi
@@ -16,7 +17,8 @@ cd $rootfs
 if [ ! -d proc ] && [ ! -d sys ] && [ ! -d dev ] && [ ! -d etc/init.d ]; then
     mkdir proc sys dev etc etc/init.d
 fi
- 
+
+# /etc/fstab not nesscary
 if [ -f etc/init.d/rcS ]; then
     rm etc/init.d/rcS
 fi
@@ -36,6 +38,7 @@ find . | cpio -o --format=newc > $rootfs_img
 
 cd $work_dir
 
+exit
 qemu-system-x86_64 \
 -netdev "user,id=eth0" \
 -device "e1000,netdev=eth0" \
